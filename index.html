@@ -1,0 +1,460 @@
+<!--
+  Skill Finder
+  Built by Jaren Cudilla — https://engineeredai.net
+  Free to use with attribution. Link back to https://engineeredai.net if you share or fork this.
+  Source: https://github.com/smallware-co/skill-finder
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skill Finder — Smallware</title>
+<meta name="description" content="Search GitHub for Claude skill files. Browse, preview, fork, and download SKILL.md files from public repos. No API key required.">
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --amber: #F5A623;
+    --bg: #080808;
+    --bg-card: #0e0e0e;
+    --bg-card-hover: #131313;
+    --bg-preview: #0a0a0a;
+    --border: #1c1c1c;
+    --border-mid: #262626;
+    --text: #e2e2e2;
+    --text-mid: #888;
+    --text-dim: #444;
+    --green: #4ade80;
+    --blue: #60a5fa;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; line-height: 1.6; min-height: 100vh; }
+
+  /* NAV */
+  .nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; padding: 0 24px; height: 48px; background: rgba(8,8,8,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); }
+  .nav-brand { font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.1em; color: var(--text); text-decoration: none; }
+  .nav-brand span { color: var(--amber); }
+  .nav-sep { font-family: var(--mono); color: var(--text-dim); margin: 0 10px; font-size: 12px; }
+  .nav-path { font-family: var(--mono); font-size: 12px; color: var(--text-dim); }
+  .nav-path span { color: var(--amber); }
+  .nav-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+  .nav-link { font-family: var(--mono); font-size: 11px; color: var(--text-dim); text-decoration: none; transition: color 0.15s; }
+  .nav-link:hover { color: var(--amber); }
+
+  /* LAYOUT */
+  .layout { display: grid; grid-template-columns: 320px 1fr; min-height: calc(100vh - 48px); }
+
+  /* LEFT PANEL */
+  .panel-left { border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 28px 20px; gap: 20px; }
+  .panel-title { font-family: var(--mono); font-size: 11px; color: var(--amber); letter-spacing: 0.12em; margin-bottom: 4px; }
+  .panel-heading { font-family: var(--mono); font-size: 18px; font-weight: 500; color: var(--text); line-height: 1.3; margin-bottom: 6px; }
+  .panel-heading em { color: var(--amber); font-style: normal; }
+  .panel-sub { font-size: 12px; color: var(--text-mid); line-height: 1.65; }
+  .divider { height: 1px; background: var(--border); }
+
+  /* SEARCH */
+  .search-wrap { position: relative; }
+  .search-input { width: 100%; background: #0c0c0c; border: 1px solid var(--border-mid); border-radius: 3px; color: var(--text); font-family: var(--sans); font-size: 13px; padding: 10px 40px 10px 12px; outline: none; transition: border-color 0.15s; }
+  .search-input:focus { border-color: var(--amber); }
+  .search-input::placeholder { color: var(--text-dim); }
+  .search-go { position: absolute; right: 0; top: 0; height: 100%; width: 38px; background: transparent; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: color 0.15s; }
+  .search-go:hover { color: var(--amber); }
+
+  /* FILTERS */
+  .filter-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.1em; margin-bottom: 8px; }
+  .filter-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .filter-chip { font-family: var(--mono); font-size: 10px; padding: 3px 8px; background: transparent; border: 1px solid var(--border-mid); border-radius: 2px; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
+  .filter-chip:hover { border-color: var(--amber); color: var(--amber); }
+  .filter-chip.active { border-color: var(--amber); color: var(--amber); background: rgba(245,166,35,0.08); }
+
+  /* RUN BTN */
+  .run-btn { width: 100%; background: var(--amber); color: #000; border: none; border-radius: 3px; font-family: var(--mono); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; padding: 11px; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .run-btn:hover { background: #e8971f; }
+  .run-btn:disabled { background: #1e1e1e; color: var(--text-dim); cursor: not-allowed; }
+  .spinner { width: 12px; height: 12px; border: 2px solid rgba(0,0,0,0.3); border-top-color: #000; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+  .run-btn.loading .spinner { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* TOKEN NOTE */
+  .token-note { font-family: var(--mono); font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+  .token-note a { color: var(--amber); text-decoration: none; }
+
+  /* ERROR */
+  .error-msg { font-family: var(--mono); font-size: 11px; color: #f87171; padding: 8px 12px; background: rgba(248,113,113,0.06); border: 1px solid rgba(248,113,113,0.2); border-radius: 3px; display: none; line-height: 1.5; }
+  .error-msg.visible { display: block; }
+
+  /* RIGHT PANEL */
+  .panel-right { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* RESULTS TOOLBAR */
+  .results-toolbar { display: flex; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); gap: 10px; min-height: 45px; }
+  .results-label { font-family: var(--mono); font-size: 11px; color: var(--amber); letter-spacing: 0.1em; }
+  .results-count { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+  .results-sort { margin-left: auto; font-family: var(--mono); font-size: 10px; color: var(--text-dim); background: transparent; border: 1px solid var(--border-mid); border-radius: 2px; padding: 4px 8px; color: var(--text-dim); cursor: pointer; outline: none; }
+  .results-sort:focus { border-color: var(--amber); }
+  .results-sort option { background: #0e0e0e; }
+
+  /* RESULTS BODY */
+  .results-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .results-body::-webkit-scrollbar { width: 4px; }
+  .results-body::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 2px; }
+
+  /* EMPTY / LOADING STATE */
+  .state-msg { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 10px; font-family: var(--mono); font-size: 12px; color: var(--text-dim); text-align: center; padding: 40px; min-height: 300px; }
+  .state-icon { font-size: 28px; opacity: 0.25; margin-bottom: 4px; }
+
+  /* SKILL CARD */
+  .skill-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; transition: border-color 0.12s; animation: fadeUp 0.2s ease both; }
+  .skill-card:hover { border-color: var(--border-mid); }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .skill-card-header { padding: 14px 16px; cursor: pointer; }
+  .skill-card-top { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+  .skill-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .skill-name { font-family: var(--mono); font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; flex: 1; }
+  .skill-repo { font-family: var(--mono); font-size: 10px; color: var(--text-dim); margin-bottom: 6px; padding-left: 26px; }
+  .skill-repo a { color: var(--amber); text-decoration: none; }
+  .skill-repo a:hover { text-decoration: underline; }
+  .skill-desc { font-size: 12px; color: var(--text-mid); line-height: 1.55; padding-left: 26px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+  .skill-meta { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-top: 1px solid var(--border); background: #0c0c0c; flex-wrap: wrap; }
+  .skill-stat { font-family: var(--mono); font-size: 10px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; }
+  .skill-stat .dot { color: var(--amber); }
+  .skill-actions { margin-left: auto; display: flex; gap: 6px; }
+  .skill-btn { font-family: var(--mono); font-size: 10px; padding: 4px 10px; background: transparent; border: 1px solid var(--border-mid); border-radius: 2px; color: var(--text-dim); cursor: pointer; transition: all 0.15s; text-decoration: none; display: inline-block; }
+  .skill-btn:hover { border-color: var(--amber); color: var(--amber); }
+  .skill-btn.primary { border-color: var(--amber); color: var(--amber); }
+  .skill-btn.copied { border-color: var(--green); color: var(--green); }
+
+  /* PREVIEW DRAWER */
+  .skill-preview { display: none; border-top: 1px solid var(--border); }
+  .skill-preview.open { display: block; }
+  .preview-toolbar { display: flex; align-items: center; gap: 8px; padding: 8px 16px; background: #0a0a0a; border-bottom: 1px solid var(--border); }
+  .preview-label { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 0.08em; flex: 1; }
+  .preview-content { font-family: var(--mono); font-size: 11px; color: #bbb; background: var(--bg-preview); padding: 16px; line-height: 1.7; max-height: 320px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; }
+  .preview-content::-webkit-scrollbar { width: 4px; }
+  .preview-content::-webkit-scrollbar-thumb { background: var(--border-mid); }
+  .preview-loading { padding: 20px 16px; font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+
+  /* PAGINATION */
+  .pagination { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 16px; border-top: 1px solid var(--border); }
+  .page-btn { font-family: var(--mono); font-size: 11px; padding: 5px 12px; background: transparent; border: 1px solid var(--border-mid); border-radius: 2px; color: var(--text-dim); cursor: pointer; transition: all 0.15s; }
+  .page-btn:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+  .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .page-info { font-family: var(--mono); font-size: 10px; color: var(--text-dim); }
+
+  @media (max-width: 768px) {
+    .layout { grid-template-columns: 1fr; }
+    .panel-left { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="https://engineeredai.net" class="nav-brand">ENGINEERED<span>AI</span></a>
+  <span class="nav-sep">//</span>
+  <span class="nav-path">tools <span>/ skill-finder</span></span>
+  <div class="nav-right">
+    <a href="https://engineeredai.net/tools" class="nav-link">← all tools</a>
+    <a href="https://github.com/smallware-co/skill-finder" target="_blank" rel="noopener" class="nav-link">github ↗</a>
+  </div>
+</nav>
+
+<div class="layout">
+
+  <!-- LEFT PANEL -->
+  <div class="panel-left">
+    <div>
+      <div class="panel-title">// skill-finder</div>
+      <div class="panel-heading">Find Claude<br><em>skill files.</em></div>
+      <p class="panel-sub">Search GitHub for SKILL.md files across public repos. Browse, preview, fork, and download skills built by the community. No API key needed.</p>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- SEARCH -->
+    <div>
+      <div class="filter-label" style="margin-bottom:8px;">SEARCH</div>
+      <div class="search-wrap">
+        <input type="text" class="search-input" id="searchInput" placeholder="e.g. content writer, SEO, QA, coding..." maxlength="100">
+        <button class="search-go" onclick="runSearch(1)">→</button>
+      </div>
+    </div>
+
+    <!-- QUICK FILTERS -->
+    <div>
+      <div class="filter-label">QUICK FILTERS</div>
+      <div class="filter-chips" id="filterChips">
+        <button class="filter-chip" onclick="quickSearch('content writer')">content</button>
+        <button class="filter-chip" onclick="quickSearch('SEO')">SEO</button>
+        <button class="filter-chip" onclick="quickSearch('coding')">coding</button>
+        <button class="filter-chip" onclick="quickSearch('QA testing')">QA</button>
+        <button class="filter-chip" onclick="quickSearch('research')">research</button>
+        <button class="filter-chip" onclick="quickSearch('social media')">social</button>
+        <button class="filter-chip" onclick="quickSearch('email')">email</button>
+        <button class="filter-chip" onclick="quickSearch('data analysis')">data</button>
+        <button class="filter-chip" onclick="quickSearch('finance')">finance</button>
+        <button class="filter-chip" onclick="quickSearch('marketing')">marketing</button>
+      </div>
+    </div>
+
+    <!-- SORT -->
+    <div>
+      <div class="filter-label">SORT BY</div>
+      <select id="sortSelect" style="width:100%; background:#0c0c0c; border:1px solid var(--border-mid); border-radius:3px; color:var(--text); font-family:var(--mono); font-size:11px; padding:8px 10px; outline:none;">
+        <option value="best-match">Best Match</option>
+        <option value="stars">Most Stars</option>
+        <option value="updated">Recently Updated</option>
+      </select>
+    </div>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <button class="run-btn" id="runBtn" onclick="runSearch(1)">
+      <div class="spinner"></div>
+      <span id="runBtnText">Search Skills →</span>
+    </button>
+
+    <div class="token-note">
+      Searches public GitHub repos for <code style="color:var(--amber);">SKILL.md</code> files. Uses GitHub's public search API — no key required. Rate limited to ~10 searches/min unauthenticated.<br><br>
+      Want to add your skills? <a href="https://github.com/smallware-co" target="_blank" rel="noopener">Contribute on GitHub ↗</a>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="panel-right">
+    <div class="results-toolbar">
+      <span class="results-label" id="resultsLabel">// results</span>
+      <span class="results-count" id="resultsCount"></span>
+    </div>
+
+    <div class="results-body" id="resultsBody">
+      <div class="state-msg">
+        <div class="state-icon">◧</div>
+        <p>Search for skills on the left.</p>
+        <p style="font-size:11px; margin-top:4px;">Try "content writer", "QA", or "SEO"</p>
+      </div>
+    </div>
+
+    <div class="pagination" id="pagination" style="display:none;">
+      <button class="page-btn" id="prevBtn" onclick="changePage(-1)" disabled>← prev</button>
+      <span class="page-info" id="pageInfo">page 1</span>
+      <button class="page-btn" id="nextBtn" onclick="changePage(1)">next →</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  let currentPage = 1;
+  let currentQuery = '';
+  let totalCount = 0;
+  const PER_PAGE = 10;
+
+  function quickSearch(term) {
+    document.getElementById('searchInput').value = term;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    event.target.classList.add('active');
+    runSearch(1);
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent = msg;
+    el.classList.add('visible');
+  }
+  function hideError() { document.getElementById('errorMsg').classList.remove('visible'); }
+
+  function setLoading(on) {
+    const btn = document.getElementById('runBtn');
+    btn.disabled = on;
+    btn.classList.toggle('loading', on);
+    document.getElementById('runBtnText').textContent = on ? 'Searching...' : 'Search Skills →';
+  }
+
+  async function runSearch(page) {
+    hideError();
+    const query = document.getElementById('searchInput').value.trim();
+    if (!query) { showError('Enter a search term first.'); return; }
+
+    currentQuery = query;
+    currentPage = page;
+
+    setLoading(true);
+    document.getElementById('resultsBody').innerHTML = `<div class="state-msg"><div class="state-icon" style="animation: spin 1s linear infinite; display:inline-block;">◌</div><p>Searching GitHub...</p></div>`;
+    document.getElementById('pagination').style.display = 'none';
+
+    const sort = document.getElementById('sortSelect').value;
+    const sortParam = sort === 'best-match' ? '' : `&sort=${sort === 'stars' ? 'stars' : 'updated'}&order=desc`;
+    const url = `https://api.github.com/search/code?q=${encodeURIComponent(query)}+filename:SKILL.md+extension:md${sortParam}&per_page=${PER_PAGE}&page=${page}`;
+
+    try {
+      const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
+
+      if (res.status === 403) {
+        const resetTime = res.headers.get('X-RateLimit-Reset');
+        const wait = resetTime ? Math.ceil((resetTime * 1000 - Date.now()) / 60000) : 1;
+        throw new Error(`GitHub rate limit hit. Wait ~${wait} min or try again shortly.`);
+      }
+      if (!res.ok) throw new Error(`GitHub API error ${res.status}`);
+
+      const data = await res.json();
+      totalCount = Math.min(data.total_count || 0, 100); // GitHub caps at 100
+
+      document.getElementById('resultsLabel').textContent = `// results for "${query}"`;
+      document.getElementById('resultsCount').textContent = totalCount > 0 ? `${totalCount} found` : '';
+
+      if (!data.items || data.items.length === 0) {
+        document.getElementById('resultsBody').innerHTML = `<div class="state-msg"><div class="state-icon">◻</div><p>No SKILL.md files found for "${query}"</p><p style="font-size:11px;margin-top:4px;">Try a broader term like "writer" or "coding"</p></div>`;
+        setLoading(false);
+        return;
+      }
+
+      renderResults(data.items);
+      updatePagination();
+
+    } catch(err) {
+      document.getElementById('resultsBody').innerHTML = `<div class="state-msg"><div class="state-icon">✕</div><p style="color:#f87171;">${err.message}</p></div>`;
+      showError(err.message);
+    }
+
+    setLoading(false);
+  }
+
+  function renderResults(items) {
+    const body = document.getElementById('resultsBody');
+    body.innerHTML = items.map((item, i) => {
+      const repo = item.repository;
+      const rawUrl = `https://raw.githubusercontent.com/${repo.full_name}/${repo.default_branch || 'main'}/${item.path}`;
+      const ghUrl = item.html_url;
+      const skillName = item.path.replace(/SKILL\.md$/i, '').replace(/\//g, ' / ').trim() || 'SKILL.md';
+
+      return `<div class="skill-card" style="animation-delay:${i * 0.04}s">
+        <div class="skill-card-header" onclick="togglePreview(this, '${encodeURIComponent(rawUrl)}')">
+          <div class="skill-card-top">
+            <span class="skill-icon">◆</span>
+            <span class="skill-name">${skillName || repo.name}</span>
+          </div>
+          <div class="skill-repo">
+            <a href="https://github.com/${repo.full_name}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+              ${repo.full_name}
+            </a>
+            ${item.path !== 'SKILL.md' ? `<span style="color:var(--text-dim);"> · ${item.path}</span>` : ''}
+          </div>
+          <div class="skill-desc">${repo.description || 'No description provided.'}</div>
+        </div>
+        <div class="skill-meta">
+          <span class="skill-stat"><span class="dot">★</span> ${repo.stargazers_count || 0}</span>
+          <span class="skill-stat"><span class="dot">◉</span> ${repo.language || 'text'}</span>
+          <span class="skill-stat">${timeAgo(repo.updated_at)}</span>
+          <div class="skill-actions">
+            <a class="skill-btn" href="${ghUrl}" target="_blank" rel="noopener">view ↗</a>
+            <button class="skill-btn primary" onclick="copySkill('${encodeURIComponent(rawUrl)}', this)">copy</button>
+            <button class="skill-btn" onclick="downloadSkill('${encodeURIComponent(rawUrl)}', '${skillName || repo.name}')">↓ download</button>
+          </div>
+        </div>
+        <div class="skill-preview" id="preview-${i}">
+          <div class="preview-toolbar">
+            <span class="preview-label">// SKILL.md preview</span>
+            <button class="skill-btn" onclick="copySkill('${encodeURIComponent(rawUrl)}', this)">copy all</button>
+          </div>
+          <div class="preview-content" id="preview-content-${i}"><span style="color:var(--text-dim);">// click card to load preview</span></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  async function togglePreview(header, encodedUrl) {
+    const card = header.closest('.skill-card');
+    const preview = card.querySelector('.skill-preview');
+    const content = card.querySelector('.preview-content');
+    const isOpen = preview.classList.contains('open');
+
+    // Close all other previews
+    document.querySelectorAll('.skill-preview.open').forEach(p => p.classList.remove('open'));
+
+    if (isOpen) return;
+
+    preview.classList.add('open');
+    content.innerHTML = '<span style="color:var(--text-dim);">// loading...</span>';
+
+    try {
+      const url = decodeURIComponent(encodedUrl);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Could not load file');
+      const text = await res.text();
+      content.textContent = text;
+    } catch(err) {
+      content.innerHTML = `<span style="color:#f87171;">// could not load preview: ${err.message}</span>`;
+    }
+  }
+
+  async function copySkill(encodedUrl, btn) {
+    try {
+      const url = decodeURIComponent(encodedUrl);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('fetch failed');
+      const text = await res.text();
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = 'copied ✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+    } catch(err) {
+      btn.textContent = 'error';
+      setTimeout(() => { btn.textContent = 'copy'; }, 2000);
+    }
+  }
+
+  async function downloadSkill(encodedUrl, name) {
+    try {
+      const url = decodeURIComponent(encodedUrl);
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('fetch failed');
+      const text = await res.text();
+      const blob = new Blob([text], { type: 'text/markdown' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `SKILL-${name.replace(/[^a-z0-9]/gi,'-').toLowerCase()}.md`;
+      a.click();
+    } catch(err) {
+      alert('Could not download: ' + err.message);
+    }
+  }
+
+  function updatePagination() {
+    const totalPages = Math.ceil(totalCount / PER_PAGE);
+    if (totalPages <= 1) { document.getElementById('pagination').style.display = 'none'; return; }
+    document.getElementById('pagination').style.display = 'flex';
+    document.getElementById('pageInfo').textContent = `page ${currentPage} of ${totalPages}`;
+    document.getElementById('prevBtn').disabled = currentPage <= 1;
+    document.getElementById('nextBtn').disabled = currentPage >= totalPages;
+  }
+
+  function changePage(dir) {
+    runSearch(currentPage + dir);
+    document.querySelector('.panel-right').scrollTo(0, 0);
+  }
+
+  function timeAgo(dateStr) {
+    if (!dateStr) return '';
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const days = Math.floor(diff / 86400000);
+    if (days < 1) return 'today';
+    if (days < 7) return `${days}d ago`;
+    if (days < 30) return `${Math.floor(days/7)}w ago`;
+    if (days < 365) return `${Math.floor(days/30)}mo ago`;
+    return `${Math.floor(days/365)}y ago`;
+  }
+
+  document.getElementById('searchInput').addEventListener('keydown', e => { if (e.key === 'Enter') runSearch(1); });
+</script>
+
+</body>
+</html>
