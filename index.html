@@ -178,6 +178,18 @@
 
     <div class="divider"></div>
 
+    <!-- GITHUB TOKEN -->
+    <div>
+      <div class="filter-label" style="margin-bottom:8px;">GITHUB TOKEN <span style="color:var(--text-dim);font-size:9px;">(required)</span></div>
+      <input type="password" class="search-input" id="githubToken" placeholder="paste your GitHub personal access token" style="margin-bottom:6px;">
+      <div class="token-note" style="margin-bottom:0;">
+        🔒 Stays in your browser only. Never stored or logged.<br>
+        <a href="https://github.com/settings/tokens/new?description=skill-finder&scopes=public_repo" target="_blank" rel="noopener">Get a free token →</a> — no special permissions needed.
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
     <!-- SEARCH -->
     <div>
       <div class="filter-label" style="margin-bottom:8px;">SEARCH</div>
@@ -222,8 +234,8 @@
     </button>
 
     <div class="token-note">
-      Searches public GitHub repos for <code style="color:var(--amber);">SKILL.md</code> files. Uses GitHub's public search API — no key required. Rate limited to ~10 searches/min unauthenticated.<br><br>
-      Want to add your skills? <a href="https://github.com/smallware-co" target="_blank" rel="noopener">Contribute on GitHub ↗</a>
+      Searches public GitHub repos for <code style="color:var(--amber);">SKILL.md</code> files using GitHub's code search API.<br><br>
+      Want to contribute? <a href="https://github.com/smallware-co" target="_blank" rel="noopener">Add your skills on GitHub ↗</a>
     </div>
   </div>
 
@@ -257,6 +269,19 @@
   let totalCount = 0;
   const PER_PAGE = 10;
 
+  // Restore saved token
+  const savedToken = localStorage.getItem('sw_gh_token');
+  if (savedToken) document.getElementById('githubToken').value = savedToken;
+
+  function getToken() { return document.getElementById('githubToken').value.trim(); }
+
+  async function authedFetch(url) {
+    const token = getToken();
+    const headers = { 'Accept': 'application/vnd.github.v3+json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    return fetch(url, { headers });
+  }
+
   function quickSearch(term) {
     document.getElementById('searchInput').value = term;
     document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
@@ -281,13 +306,19 @@
   async function runSearch(page) {
     hideError();
     const query = document.getElementById('searchInput').value.trim();
+    const token = document.getElementById('githubToken').value.trim();
+
+    if (!token) { showError('Paste your GitHub token first.'); return; }
     if (!query) { showError('Enter a search term first.'); return; }
+
+    // Save token
+    localStorage.setItem('sw_gh_token', token);
 
     currentQuery = query;
     currentPage = page;
 
     setLoading(true);
-    document.getElementById('resultsBody').innerHTML = `<div class="state-msg"><div class="state-icon" style="animation: spin 1s linear infinite; display:inline-block;">◌</div><p>Searching GitHub...</p></div>`;
+    document.getElementById('resultsBody').innerHTML = `<div class="state-msg"><div class="state-icon">◌</div><p>Searching GitHub...</p></div>`;
     document.getElementById('pagination').style.display = 'none';
 
     const sort = document.getElementById('sortSelect').value;
@@ -295,7 +326,12 @@
     const url = `https://api.github.com/search/code?q=${encodeURIComponent(query)}+filename:SKILL.md+extension:md${sortParam}&per_page=${PER_PAGE}&page=${page}`;
 
     try {
-      const res = await fetch(url, { headers: { 'Accept': 'application/vnd.github.v3+json' } });
+      const res = await fetch(url, {
+        headers: {
+          'Accept': 'application/vnd.github.v3+json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
 
       if (res.status === 403) {
         const resetTime = res.headers.get('X-RateLimit-Reset');
@@ -386,7 +422,7 @@
 
     try {
       const url = decodeURIComponent(encodedUrl);
-      const res = await fetch(url);
+      const res = await authedFetch(url);
       if (!res.ok) throw new Error('Could not load file');
       const text = await res.text();
       content.textContent = text;
@@ -398,7 +434,7 @@
   async function copySkill(encodedUrl, btn) {
     try {
       const url = decodeURIComponent(encodedUrl);
-      const res = await fetch(url);
+      const res = await authedFetch(url);
       if (!res.ok) throw new Error('fetch failed');
       const text = await res.text();
       await navigator.clipboard.writeText(text);
@@ -415,7 +451,7 @@
   async function downloadSkill(encodedUrl, name) {
     try {
       const url = decodeURIComponent(encodedUrl);
-      const res = await fetch(url);
+      const res = await authedFetch(url);
       if (!res.ok) throw new Error('fetch failed');
       const text = await res.text();
       const blob = new Blob([text], { type: 'text/markdown' });
